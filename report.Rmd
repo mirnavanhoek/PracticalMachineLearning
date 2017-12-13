@@ -1,0 +1,160 @@
+---
+title: |
+    | Report Practical Machine Learning:
+author: "Mirna van Hoek"
+date: "15 December 2017"
+output:
+  html_document:
+      fig_caption: yes
+---
+```{r global_options, include=FALSE}
+knitr::opts_chunk$set(fig.pos = 'h')
+```
+
+# Goal
+
+Devices like Jawbone Up, Nike Fuelband and Fitbit are used to collect a large amount of data about personal activity. The data is used to quantify how much of a particular activity a person does. But hardly ever do they quantify how well a person performs an activity.
+In this report data from accelerometers on belt, forearm and dumbell of 6 participants is analyzed.
+The goal is to predict the manner in which the participants performed the exercise. 
+
+Different models are defined and trained using the training set. The best model is chosen based on a validation set and the out of sample error.
+The best performing model is then used to predict the manner in which the activity is performed for the 20 observations in the test dataset.
+
+# Dataset
+
+For this analysis the Weight Lifting Exercise Dataset is used.
+Data is obtained from different accelerometers caried on the belt, forarm or dumbell of 6 pparticipants while they perform barbell lifts.
+The lifts are performed in 5 different ways: one correctly and 4 different ways to perform the lifts incorrectly. 
+This is indicated by the "classe" variable in the training set, where "A" indicates that the lift is performed correctly[^1].
+The data for this project come from this source: 
+[http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har](http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har). 
+
+
+[^1]: Source: Velloso, E.; Bulling, A.; Gellersen, H.; Ugulino, W.; Fuks, H. Qualitative Activity Recognition of Weight Lifting Exercises. Proceedings of 4th International Conference in Cooperation with SIGCHI (Augmented Human '13) . Stuttgart, Germany: ACM SIGCHI, 2013.
+
+
+# Data Analysis
+
+## Read training and test data from csv
+```{r libraries, warning=FALSE, message=FALSE}
+library(knitr)
+library(caret)
+library(parallel)
+library(doParallel)
+library(ggplot2)
+```
+
+``` {r read csv, cache=TRUE}
+trainingCSV <- read.csv("pml-training.csv", as.is = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+testingCSV <- read.csv("pml-testing.csv", as.is = TRUE, na.strings = c("NA", "#DIV/0!", ""))
+```
+
+## Preprocessing
+
+### Data Cleaning
+
+The training data set consists of 19622 observations and 160 variables.
+The first 7 variables ("X", "user_name", "raw_timestamp_part_1", "raw_timestamp_part_2", "cvtd_timestamp", "new_window", "num_window")
+seem meaningless for use of classifying how an activity was performed and are removed.
+``` {r remove meaningless}
+training <- trainingCSV[,-c(1:7)]
+testing <- testingCSV[,-c(1:7)]
+```
+
+Several variables have a lot of missing values. The near zero variance variables need to be removed.
+``` {r remove near zero variance}
+training[is.na(training)] = 0.
+nzv <- nearZeroVar(training)
+training <- training[-nzv]
+testing <- testing[-nzv]
+```
+
+<!--Also variables (columns) for which most values are missing are not of much use for classifying the manner in which the activity is performed and are removed.
+``` {r remove most missing}
+ok <- colMeans(is.na(training))<0.90
+training <- training[,ok]
+testing <- testing[,ok]
+```
+--->
+
+The cleaned-up training set consists of 19622 observations and 53 variables.
+
+
+### Validation Sample
+
+The training dataset is divided-up to create a training set to train the models and a validation set to asses the models.
+
+``` {r create validation data}
+inTrain <- createDataPartition(y=training$classe, p=0.7, list=FALSE)
+train <- training[inTrain,]
+validation <- training[-inTrain,]
+```
+The validation dataset contains 5885 observations and the training set contains 13737 observables.
+
+## Model building
+
+Different models (Decision Tree, Gradient Boosting, Random Forest) are build and trained using the training set.
+
+``` {r create models: cross validation}
+cluster <- makeCluster(detectCores() - 1)
+registerDoParallel(cluster)
+fitControl <- trainControl(method='cv', number = 3, allowParallel=TRUE)
+```
+
+### Decision Tree
+``` {r create models: decision tree, cache=TRUE, message=FALSE, warning=FALSE}
+model_rpart <- train( classe ~ ., data=train, trControl=fitControl, method='rpart')
+```
+
+
+### Gradient Boosting
+``` {r create models: gradient boosting, cache=TRUE, message=FALSE, warning=FALSE, results='hide'}
+model_gbm <- train( classe ~ ., data=train, trControl=fitControl, method='gbm')
+```
+
+### Random Forest
+``` {r create models: random forest, cache=TRUE, message=FALSE, warning=FALSE}
+model_rf <- train( classe ~ ., data=train, trControl=fitControl, method='rf')
+```
+
+### Model Assesment
+The models are assesed based on the out of sample error using the validation set.
+
+``` {r create models: out of sample error}
+predRPART <- predict(model_rpart, newdata=validation)
+cmRPART <- confusionMatrix(predRPART, validation$classe)
+predGBM <- predict(model_gbm, newdata=validation)
+cmGBM <- confusionMatrix(predGBM, validation$classe)
+predRF <- predict(model_rf, newdata=validation)
+cmRF <- confusionMatrix(predRF, validation$classe)
+
+AccuracyResults <- data.frame( Model = c('RPART', 'GBM', 'RF'), Accuracy = rbind(cmRPART$overall[1], cmGBM$overall[1], cmRF$overall[1]))
+print(AccuracyResults)
+```
+In figures 1-3 in the Appendix the confusion matrices for the different models are plotted. As can be seen the Random Forest model performs the best/is less confused.
+Based on the accuracy results the Random Forest Model, with an accuracy of `r cmRF$overall[1]`, has the highest accuracy (smalles out of sample error), therefore, the Random Forest Model is the best model.
+
+## Prediction
+
+Using the best model (random forest) from the previous section for each of the 20 observations in the test sample is predicted in what manner the lifts were performed.
+
+``` {r pediction}
+predTest <- predict(model_rf, newdata=testing)
+TestPredictionResults <- data.frame( problem_id=testing$problem_id, predicted=predTest)
+    print(TestPredictionResults)
+
+```
+# Appendix
+
+Confusion Matrix plots for the different models.
+
+```{r create models: confusion matrix plot rpart, out.width='40%', fig.cap="\\label{fig:cm1}Figure 1. Confusion Matrix plot for RPART model"}
+heatmap(cmRPART$table, Rowv=NA, Colv=NA, scale="column", col=colorRampPalette(c("blue", "red"))(255), revC=T, xlab="Reference", ylab="Prediction" )
+```
+```{r create models: confusion matrix plot gbm, out.width='40%', fig.cap="Figure 2. Confusion Matrix plot for GBM model"}
+heatmap(cmGBM$table, Rowv=NA, Colv=NA, scale="column", col=colorRampPalette(c("blue", "red"))(255), revC=T, xlab="Reference", ylab="Prediction" )
+```
+```{r create models: confusion matrix plot rf, out.width='40%', fig.cap="Figure 3. Confusion Matrix plot for RF model"}
+heatmap(cmRF$table, Rowv=NA, Colv=NA, scale="column", col=colorRampPalette(c("blue", "red"))(255), revC=T, xlab="Reference", ylab="Prediction" )
+```
+
