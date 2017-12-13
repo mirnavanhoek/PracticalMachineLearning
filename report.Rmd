@@ -2,7 +2,7 @@
 title: |
     | Report Practical Machine Learning:
 author: "Mirna van Hoek"
-date: "15 December 2017"
+date: "13 December 2017"
 output:
   html_document:
       fig_caption: yes
@@ -131,8 +131,8 @@ cmRF <- confusionMatrix(predRF, validation$classe)
 AccuracyResults <- data.frame( Model = c('RPART', 'GBM', 'RF'), Accuracy = rbind(cmRPART$overall[1], cmGBM$overall[1], cmRF$overall[1]))
 print(AccuracyResults)
 ```
-In figures 1-3 in the Appendix the confusion matrices for the different models are plotted. As can be seen the Random Forest model performs the best/is less confused.
-Based on the accuracy results the Random Forest Model, with an accuracy of `r cmRF$overall[1]`, has the highest accuracy (smalles out of sample error), therefore, the Random Forest Model is the best model.
+In figures 1-3 in the Appendix the confusion matrices for the different models are plotted. As can be seen the Random Forest model performs the best/has the best predictions, i.e. is the most accurate since most observations in the confusion matrix end up on the diagonal and less observations end up on the off-diagonal (so smaller out of sample error).
+Based on the accuracy results the Random Forest Model, with an accuracy of `r cmRF$overall[1]`, has the highest accuracy (and thus the smalles out of sample error (`r 1-cmRF$overall[1]`)), therefore, the Random Forest Model is the best model.
 
 ## Prediction
 
@@ -142,11 +142,12 @@ Using the best model (random forest) from the previous section for each of the 2
 predTest <- predict(model_rf, newdata=testing)
 TestPredictionResults <- data.frame( problem_id=testing$problem_id, predicted=predTest)
     print(TestPredictionResults)
-
 ```
 # Appendix
 
 Confusion Matrix plots for the different models.
+The more observations are on the diagonal of the confusion matrix the more accurate the model predicts.
+The less observations are on the off-diagonal of the confusion matrix the lower the out of sample error is.
 
 ```{r create models: confusion matrix plot rpart, out.width='40%', fig.cap="\\label{fig:cm1}Figure 1. Confusion Matrix plot for RPART model"}
 heatmap(cmRPART$table, Rowv=NA, Colv=NA, scale="column", col=colorRampPalette(c("blue", "red"))(255), revC=T, xlab="Reference", ylab="Prediction" )
